@@ -24,7 +24,7 @@ func login(w http.ResponseWriter, req *http.Request) int {
 	)
 
 	x = new(UserLogin)
-	if err = json.NewCoder(req.body).Decode(x); err != nil {
+	if err = json.NewDecoder(req.body).Decode(x); err != nil {
 		return -5
 	}
 	//include env variable for database
@@ -54,6 +54,11 @@ func login(w http.ResponseWriter, req *http.Request) int {
 	}
 
 	//return jwt-go
+	//token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+
+	//})
+
+	json.NewEncoder(w).Encode(JwtToken{Token: tokenString})
 
 }
 
