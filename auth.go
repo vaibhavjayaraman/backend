@@ -17,6 +17,10 @@ type UserLogin struct {
 	Password string `json:"password"`
 }
 
+type Claim struct {
+	Username string `json:"username"`
+}
+
 func login(w http.ResponseWriter, req *http.Request) int {
 	var (
 		expectedHash string
@@ -31,6 +35,7 @@ func login(w http.ResponseWriter, req *http.Request) int {
 	db, err := sql.Open("postgres", nil)
 	if err != nil {
 		log.Fatal("Error connecting to the database: ", err)
+		return
 	}
 
 	//change to use env variable for user_auth table
@@ -38,6 +43,7 @@ func login(w http.ResponseWriter, req *http.Request) int {
 		"username=$1", x.Username).Scan(&expectedHash, &salt)
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 
 	//check if password matches hashedpassword
@@ -46,6 +52,7 @@ func login(w http.ResponseWriter, req *http.Request) int {
 
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 
 	if attempt != x.expectedHash {
@@ -53,13 +60,22 @@ func login(w http.ResponseWriter, req *http.Request) int {
 		return
 	}
 
-	//return jwt-go
-	//token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	claim := Claim{
+		x.Username,
+		jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(time.Hour * 2).Unix(),
+			IssuedAt:  time.Now(),
+		},
+	}
 
-	//})
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
+	tokenString, err := token.SignedString([]byte("aVerySecretKey"))
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
 	json.NewEncoder(w).Encode(JwtToken{Token: tokenString})
-
 }
 
 func main() {
