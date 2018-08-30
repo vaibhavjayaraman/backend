@@ -31,6 +31,40 @@ const saltChars = "01234567890!@#$%^&*" +
 
 const saltCharLength = len(saltChars)
 
+type MiddlewareAdapter func(http.Handler) http.Handler
+
+func AuthMiddleware() MiddlewareAdapter {
+	return func(h http.Handler) http.Handler {
+		return http.HandleFunc(func(w http.ResponseWriter, r *http.Request) {
+			//get claims
+			h.ServeHTTP(r, w)
+		})
+	}
+}
+
+func authenticate(tokenString string) (jwt.MapClaims, bool) {
+	token, err = jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte("aVerySecretKey")
+	})
+	if err != nil {
+		return nil, false
+	}
+
+	claims, ok = token.Claims.(jwt.MapClaims)
+
+	if ok != nil {
+		log.Printf("Server Error: Failed to Extract Claim")
+		return nil, false
+	}
+
+	if token.Valid {
+		return claims, true
+	} else {
+		log.Printf("Invalid Jwt Token")
+		return nil, false
+	}
+}
+
 func createSalt(saltLength int) string {
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
@@ -146,6 +180,7 @@ func login(w http.ResponseWriter, req *http.Request) int {
 		return
 	}
 	json.NewEncoder(w).Encode(JwtToken{Token: tokenString})
+	w.WriteHeader(http.StatusOK)
 }
 
 func main() {
