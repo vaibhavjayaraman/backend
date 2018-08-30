@@ -23,6 +23,7 @@ type UserCred struct {
 
 type Claim struct {
 	Username string `json:"username"`
+	jwt.StandardClaims
 }
 
 const saltChars = "01234567890!@#$%^&*" +
@@ -37,13 +38,26 @@ func AuthMiddleware() MiddlewareAdapter {
 	return func(h http.Handler) http.Handler {
 		return http.HandleFunc(func(w http.ResponseWriter, r *http.Request) {
 			//get claims
-			h.ServeHTTP(r, w)
+			var js interface{}
+			err := json.Unmarshal(r.Body, &js)
+			m := f.(map[string]interface{})
+			tokenString := js["token"]
+			if tokenString != nil {
+				auth := authenticate(&tokenString)
+				if auth {
+					h.ServeHTTP(r, w)
+				} else {
+					w.WriteHeader(http.StatusUnAuthorized)
+				}
+			} else {
+				w.writeHeader(http.BadRequest)
+			}
 		})
 	}
 }
 
-func authenticate(tokenString string) (jwt.MapClaims, bool) {
-	token, err = jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+func authenticate(tokenString *string) (jwt.MapClaims, bool) {
+	token, err = jwt.Parse(*tokenString, func(token *jwt.Token) (interface{}, error) {
 		return []byte("aVerySecretKey")
 	})
 	if err != nil {
@@ -78,7 +92,7 @@ func createSalt(saltLength int) string {
 func signup(w http.ResponseWriter, req *http.Request) int {
 	//check to see if username is unique
 	x := new(UserCred)
-	if err = json.NewDecoder(requ.body).Decode(x); err != nil {
+	if err = json.NewDecoder(req.Body).Decode(x); err != nil {
 		return 0 //server error
 	}
 
