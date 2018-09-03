@@ -1,15 +1,17 @@
 package historymap_auth
 
 import (
-	"crypto/hmac"
-	"crypto/rand"
+	"math/rand"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
-	_ "github.com/lib/pg"
+	_ "github.com/lib/pq"
 	"golang.org/x/crypto/scrypt"
 	"log"
 	"net/http"
+	"reflect"
+	"time"
 )
 
 //change to use env var
@@ -34,53 +36,57 @@ const saltCharLength = len(saltChars)
 
 type MiddlewareAdapter func(http.Handler) http.Handler
 
-func AuthMiddleware() MiddlewareAdapter {
-	return func(h http.Handler) http.Handler {
-		return http.HandleFunc(func(w http.ResponseWriter, r *http.Request) {
-			//get claims
-			var js interface{}
-			err := json.Unmarshal(r.Body, &js)
-			m := f.(map[string]interface{})
-			tokenString := js["token"]
-			if tokenString != nil {
-				auth := authenticate(&tokenString)
-				if auth {
-					h.ServeHTTP(r, w)
-				} else {
-					w.WriteHeader(http.StatusUnAuthorized)
-				}
+type AuthHandler func(username string) http.Handler
+
+func AuthMiddleware(next AuthHandler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		//get claims
+		var js interface{}
+		err := json.NewDecoder(r.Body).Decode(&js);
+		if err != nil {
+			return;
+		}
+		m := js.(map[string]interface{})
+		tokenString := fmt.Sprint(m["token"]);
+		if tokenString != "" {
+			username, auth := authenticate(&tokenString)
+			if auth {
+				authHandler := next(username);
+				authHandler.ServeHTTP(w, r);
 			} else {
-				w.writeHeader(http.BadRequest)
+				w.WriteHeader(http.StatusUnauthorized)
 			}
-		})
-	}
+		}
+	})
 }
 
-func authenticate(tokenString *string) (jwt.MapClaims, bool) {
-	token, err = jwt.Parse(*tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte("aVerySecretKey")
+func authenticate(tokenString *string) (string, bool) {
+	tkn, err := jwt.Parse(*tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte("aVerySecretKey"), nil
 	})
 	if err != nil {
 		return nil, false
 	}
 
-	claims, ok = token.Claims.(jwt.MapClaims)
+	claim,ok := tkn.Claims.(jwt.MapClaims);
 
-	if ok != nil {
-		log.Printf("Server Error: Failed to Extract Claim")
-		return nil, false
+	if ok == false {
+		log.Printf("Server Error: Problem Reading Claim")
+		return "", false
 	}
 
-	if token.Valid {
-		return claims, true
+	username := fmt.Sprint(claim["username"]);
+
+	if tkn.Valid {
+		return username, true
 	} else {
 		log.Printf("Invalid Jwt Token")
-		return nil, false
+		return "", false
 	}
 }
 
 func createSalt(saltLength int) string {
-	s1 := rand.NewSource(time.Now().UnixNano())
+	s1 := rand.Seed(time.Now().UnixNano())
 	r1 := rand.New(s1)
 	salt := make([]byte, saltLength)
 	for i := range salt {
@@ -89,14 +95,14 @@ func createSalt(saltLength int) string {
 	return string(salt)
 }
 
-func signup(w http.ResponseWriter, req *http.Request) int {
+func signup(w http.ResponseWriter, req *http.Request) {
 	//check to see if username is unique
 	x := new(UserCred)
-	if err = json.NewDecoder(req.Body).Decode(x); err != nil {
-		return 0 //server error
+	if err := json.NewDecoder(req.Body).Decode(x); err != nil {
+		return; //server error
 	}
 
-	db, err := sql.open("postgres", nil)
+	db, err := sql.Open("postgres", nil)
 	if err != nil {
 		log.Fatal("Error connecting to database:", err)
 		return
@@ -111,13 +117,13 @@ func signup(w http.ResponseWriter, req *http.Request) int {
 		return
 	}
 
-	if checkName != nil {
-		w.WriteHeader(http.BadRequest)
+	if checkName == "" {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	if len(x.Password) < 10 {
-		w.WriteHeader(http.BadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
@@ -136,18 +142,18 @@ func signup(w http.ResponseWriter, req *http.Request) int {
 		log.Fatal(err)
 		return
 	}
-	w.writeHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK)
 }
 
-func login(w http.ResponseWriter, req *http.Request) int {
+func login(w http.ResponseWriter, req *http.Request) {
 	var (
 		expectedHash string
 		salt         string
 	)
 
 	x := new(UserCred)
-	if err = json.NewDecoder(req.body).Decode(x); err != nil {
-		return -5
+	if err := json.NewDecoder(req.Body).Decode(x); err != nil {
+		return;
 	}
 	//include env variable for database
 	db, err := sql.Open("postgres", nil)
@@ -166,14 +172,14 @@ func login(w http.ResponseWriter, req *http.Request) int {
 
 	//check if password matches hashedpassword
 	//change N, r, p to nonmagic num
-	attempt, err = scrypt.Key([]byte(x.Password), []byte(salt), 32768, 8, 1, 32)
+	attempt, err := scrypt.Key([]byte(x.Password), []byte(salt), 32768, 8, 1, 32)
 
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
 
-	if attempt != x.expectedHash {
+	if reflect.DeepEqual(string(attempt[:]), expectedHash) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
