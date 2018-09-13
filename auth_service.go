@@ -86,7 +86,7 @@ func authenticate(tokenString *string) (string, bool) {
 }
 
 func createSalt(saltLength int) string {
-	s1 := rand.Seed(time.Now().UnixNano())
+	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
 	salt := make([]byte, saltLength)
 	for i := range salt {
