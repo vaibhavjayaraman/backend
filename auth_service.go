@@ -145,6 +145,10 @@ func signup(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+type JwtToken struct {
+	Token string `json:"token"`
+}
+
 func login(w http.ResponseWriter, req *http.Request) {
 	var (
 		expectedHash string
@@ -184,11 +188,11 @@ func login(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	claim := Claim{
+	claims := Claim{
 		x.Username,
 		jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(time.Hour * 2).Unix(),
-			IssuedAt:  time.Now(),
+			IssuedAt:  time.Now().Unix(),
 		},
 	}
 
@@ -204,15 +208,15 @@ func login(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-
 	//change address container env variable
 	authServ := &http.Server{
 		Addr:         ":8000",
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
-	authServ.HandleFunc("/login", login)
-	authServ.HandleFunc("/signup", signup)
+
+	authServ.HandleFunc("/login/", login)
+	authServ.HandleFunc("/signup/", signup)
 	//switch to TLS
 	log.Fatal(authServ.ListenAndServe())
 }
