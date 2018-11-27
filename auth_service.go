@@ -11,11 +11,31 @@ import (
 	"log"
 	"net/http"
 	"reflect"
+	"strconv"
 	"time"
+	"os"
 )
 
-//change to use env var
-var auth_db string = "database"
+
+func GetEnv(key, defaultVal string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		return defaultVal
+	}
+	return key
+}
+
+var (
+	host = GetEnv("users_host", "oilspill.ocf.berkeley.edu")
+	port = GetEnv("users_post",  "5000")
+	user = GetEnv("users_user", "postgres")
+	password = GetEnv("users_password", "docker")
+	dbname = GetEnv("users_dbname" , "historymap_users")
+
+	jwtSecretKey = []byte(GetEnv("historymap_jwt_secret_key", "aVerySecretKey"))
+)
+
+var psqlInfo = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 
 //Change to byte buffer maybe
 type UserCred struct {
@@ -24,7 +44,7 @@ type UserCred struct {
 }
 
 type Claim struct {
-	Username string `json:"username"`
+	userId int `json:"userId"`
 	jwt.StandardClaims
 }
 
@@ -36,52 +56,52 @@ const saltCharLength = len(saltChars)
 
 type MiddlewareAdapter func(http.Handler) http.Handler
 
-type AuthHandler func(username string) http.Handler
+type AuthHandler func(uidToken int, valid bool) http.Handler
 
-func AuthMiddleware(next AuthHandler) http.Handler {
+func AuthMiddleware(authFunc AuthHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//get claims
 		var js interface{}
-		err := json.NewDecoder(r.Body).Decode(&js);
+		err := json.NewDecoder(r.Body).Decode(&js)
 		if err != nil {
-			return;
+			return
 		}
+
 		m := js.(map[string]interface{})
-		tokenString := fmt.Sprint(m["token"]);
+		tokenString := fmt.Sprint(m["token"])
 		if tokenString != "" {
-			username, auth := authenticate(&tokenString)
-			if auth {
-				authHandler := next(username);
-				authHandler.ServeHTTP(w, r);
-			} else {
-				w.WriteHeader(http.StatusUnauthorized)
-			}
+			uidToken, valid := authenticate(&tokenString)
+			authHandler := authFunc(uidToken, valid)
+			authHandler.ServeHTTP(w, r)
 		}
 	})
 }
 
-func authenticate(tokenString *string) (string, bool) {
+func authenticate(tokenString *string) (int, bool) {
 	tkn, err := jwt.Parse(*tokenString, func(token *jwt.Token) (interface{}, error) {
-		return []byte("aVerySecretKey"), nil
+		return jwtSecretKey, nil
 	})
 	if err != nil {
-		return nil, false
+		return -1, false
 	}
 
 	claim,ok := tkn.Claims.(jwt.MapClaims);
 
 	if ok == false {
 		log.Printf("Server Error: Problem Reading Claim")
-		return "", false
+		return -1, false
 	}
 
-	username := fmt.Sprint(claim["username"]);
+	userId, err := strconv.Atoi(fmt.Sprint(claim["userId"]))
+	if err != nil {
+		return -1, false
+	}
 
 	if tkn.Valid {
-		return username, true
+		return userId, true
 	} else {
 		log.Printf("Invalid Jwt Token")
-		return "", false
+		return -1, false
 	}
 }
 
@@ -102,7 +122,9 @@ func signup(w http.ResponseWriter, req *http.Request) {
 		return; //server error
 	}
 
-	db, err := sql.Open("postgres", nil)
+	db, err := sql.Open("postgres", psqlInfo)
+	defer db.Close()
+
 	if err != nil {
 		log.Fatal("Error connecting to database:", err)
 		return
@@ -117,7 +139,7 @@ func signup(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if checkName == "" {
+	if checkName != "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -153,22 +175,24 @@ func login(w http.ResponseWriter, req *http.Request) {
 	var (
 		expectedHash string
 		salt         string
+		id 			 int
 	)
 
 	x := new(UserCred)
 	if err := json.NewDecoder(req.Body).Decode(x); err != nil {
-		return;
+		return
 	}
 	//include env variable for database
-	db, err := sql.Open("postgres", nil)
+	db, err := sql.Open("postgres", psqlInfo)
 	if err != nil {
 		log.Fatal("Error connecting to the database: ", err)
 		return
 	}
 
 	//change to use env variable for accounts  table
-	err = db.QueryRow("SELECT password_hash, salt FROM  accounts  WHERE"+
-		"username=$1", x.Username).Scan(&expectedHash, &salt)
+	err = db.QueryRow("SELECT id, password_hash, salt FROM  accounts  WHERE "+
+		"username=$1", x.Username).Scan(&id, &expectedHash, &salt)
+
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -189,7 +213,7 @@ func login(w http.ResponseWriter, req *http.Request) {
 	}
 
 	claims := Claim{
-		x.Username,
+		id,
 		jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(time.Hour * 2).Unix(),
 			IssuedAt:  time.Now().Unix(),
@@ -198,7 +222,7 @@ func login(w http.ResponseWriter, req *http.Request) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenString, err := token.SignedString([]byte("aVerySecretKey"))
+	tokenString, err := token.SignedString(jwt_secret_key)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -220,3 +244,23 @@ func main() {
 	//switch to TLS
 	log.Fatal(authServ.ListenAndServe())
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
