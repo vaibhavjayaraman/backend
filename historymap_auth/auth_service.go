@@ -222,7 +222,7 @@ func login(w http.ResponseWriter, req *http.Request) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenString, err := token.SignedString(jwt_secret_key)
+	tokenString, err := token.SignedString(jwtSecretKey)
 	if err != nil {
 		log.Fatal(err)
 		return
