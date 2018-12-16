@@ -99,9 +99,6 @@ func recordUserData(request articleRequest) {
 	entryExists := db.NewRecord(&user)
 	if !entryExists {
 		db.Create(&user)
-	}
-
-
-}
+	} }
 
 
