@@ -1,4 +1,4 @@
-package wikipedia_data
+package wikipedia_datm
 
 
 import (
