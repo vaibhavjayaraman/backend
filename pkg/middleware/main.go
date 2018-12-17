@@ -22,8 +22,6 @@ var OutChain MiddlewareOut = func(h http.HandlerFunc, middlewares ...Middleware)
 	}
 }
 
-
 //Middleware Chains
-
 
 

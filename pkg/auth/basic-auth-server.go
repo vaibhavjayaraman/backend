@@ -31,7 +31,7 @@ type User struct {
 	PasswordHash string `gorm:"type:text"`
 	PasswordSalt string `gorm:"type:text"`
 	ID uint `gorm:"AUTO_INCREMENT"`
-	Email  string  `gorm:"type:varchar(100);unique_index"`
+	Email  string  `gorm:"size:255"`
 	Joined time.Time
 }
 
