@@ -1,5 +1,7 @@
 package main
 
+import "historymap-microservices/pkg/wikipedia-data"
+
 func main() {
-	return
+	wikipediadata.ArticleDataServer()
 }

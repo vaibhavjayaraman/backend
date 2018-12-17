@@ -1,5 +1,7 @@
 package main
 
+import "historymap-microservices/pkg/auth"
+
 func main() {
-	return
+	auth.AuthServer()
 }

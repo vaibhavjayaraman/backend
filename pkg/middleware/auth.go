@@ -6,11 +6,15 @@ import (
 	"net/http"
 )
 
-func AuthMiddleware() Middleware {
+func Auth(unAuthchain http.HandlerFunc) Middleware {
 	return func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if validate(w, r) {
 				h(w,r)
+			} else {
+				if unAuthchain != nil {
+					unAuthchain(w,r)
+				}
 			}
 		}
 	}
