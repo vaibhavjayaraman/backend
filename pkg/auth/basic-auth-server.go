@@ -65,6 +65,16 @@ func signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if newUser.Username == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if len(newUser.Password) < 10 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	if !stringsUnalike(newUser.Username, newUser.Password) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -129,7 +139,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 
 	token := jwt.New(jwt.SigningMethodHS256)
 	claims := token.Claims.(jwt.MapClaims)
-	claims["ID"] = user
+	claims["name"] = user
 	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
 	t, err := token.SignedString(tools.JwtSecretKey)
 	if err != nil {
