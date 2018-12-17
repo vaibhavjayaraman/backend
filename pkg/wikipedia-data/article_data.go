@@ -19,12 +19,21 @@ var (
 	dbname = tools.GetEnv("wikipedia_data_dbname" , "historymap_wikipedia")
 )
 
-var dbString = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host, port, user, password, dbname)
+var dbParams = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
 func ArticleDataServer() {
+	db, err := gorm.Open("postgres", dbParams)
+	defer db.Close()
+	if err != nil {
+		return
+	}
+
 	mux := http.NewServeMux()
 	articles := make(chan articleData, 5000)
 	users := make(chan userArticleData, 5000)
+
+	go processArticleData(db, articles)
+	go processUserData(db, users)
 
 	authChain := middleware.Auth(recordData(false, articles, nil))
 	mux.HandleFunc("/wikidata", authChain(recordData(true, articles, users)))
