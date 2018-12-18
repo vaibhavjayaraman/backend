@@ -16,16 +16,16 @@ import (
 
 
 var (
-	host = tools.GetEnv("users_host", "oilspill.ocf.berkeley.edu")
-	port = tools.GetEnv("users_post",  "5000")
+	host = tools.GetEnv("users_host", "localhost")
+	port = tools.GetEnv("users_post",  "5432")
 	user = tools.GetEnv("users_user", "postgres")
-	password = tools.GetEnv("users_password", "docker")
-	dbname = tools.GetEnv("users_dbname" , "historymap_users")
+	password = tools.GetEnv("users_password", "postgres")
+	dbname = tools.GetEnv("users_dbname" , "usersaccounts")
 )
 
 var dbParams = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
-type User struct {
+type UserAccount struct {
 	gorm.Model
 	Username string `gorm:"size:255"`
 	PasswordHash string `gorm:"type:text"`
@@ -90,7 +90,7 @@ func signup(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		user := User{
+		user := UserAccount{
 			Username:     newUser.Username,
 			PasswordHash: string(passwordHash),
 			PasswordSalt: string(salt),
