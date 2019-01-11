@@ -20,7 +20,7 @@ var (
 	port = tools.GetEnv("users_post",  "5432")
 	user = tools.GetEnv("users_user", "postgres")
 	password = tools.GetEnv("users_password", "postgres")
-	dbname = tools.GetEnv("users_dbname" , "usersaccounts")
+	dbname = tools.GetEnv("users_dbname" , "user_accounts")
 )
 
 var dbParams = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host, port, user, password, dbname)
@@ -98,7 +98,7 @@ func signup(db *gorm.DB) http.HandlerFunc {
 			Joined:       time.Now(),
 		}
 
-		err = db.Create(user).Error
+		err = db.Create(&user).Error
 
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)

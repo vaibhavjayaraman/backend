@@ -13,7 +13,7 @@ import (
 	"github.com/ory/dockertest"
 )
 
-var db * gorm.DB
+var db *gorm.DB
 
 func TestMain(m *testing.M) {
 	pool, err := dockertest.NewPool("")
@@ -26,9 +26,9 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Could not start resource: %s", err)
 	}
 
-	if err := pool.Retry(func () error {
+	if err = pool.Retry(func () error {
 		hostPort := resource.GetPort("5432/tcp")
-		dbParams := fmt.Sprintf("host=localhost:%s port=%s user=%s password=%s dbname=%s", hostPort, port, user, password, dbname)
+		dbParams := fmt.Sprintf("host=localhost port=%s user=%s sslmode=disable", hostPort, user)
 		db, err = gorm.Open("postgres", dbParams)
 		if err != nil {
 			log.Fatalf("Could not connect to database: %s", err)
@@ -88,9 +88,10 @@ func TestBasicAccountCreation(t *testing.T) {
 	token := new(JwtToken)
 
 	err = json.Unmarshal(recorder.Body.Bytes(), &token)
+	/*
 	if err != nil {
 		log.Fatal("Json Unmarshal Error: %s ", err)
-	}
+	} */
 
 	if token.Token == "" {
 		t.Errorf("Jwt Token is empty")
