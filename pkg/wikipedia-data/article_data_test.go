@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestBasicArticleDataAddNoUser(t *testing.T) {
+func TestBasicArticleDataAddNoUserNoConccurency(t *testing.T) {
 	url := "https://en.wikipedia.org/wiki/Alhambra"
 	title := "Alhambra"
 	lat := 37.17695
@@ -94,6 +94,7 @@ func TestBasicArticleDataAddNoUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	recorder = httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
 
 	if status := recorder.Code; status != http.StatusOK {

@@ -57,6 +57,10 @@ func processArticleData (db *gorm.DB, in <-chan ArticleData) {
 			db.Create(&data)
 		}
 
+		created := db.NewRecord(data)
+		if created {
+			return
+		}
 		db.First(&data)
 
 		switch data.ArticleInteraction {
@@ -70,7 +74,7 @@ func processArticleData (db *gorm.DB, in <-chan ArticleData) {
 			data.Searched += 1
 		}
 		data.UpdatedAt = time.Now()
-		db.Save(data)
+		db.Save(&data)
 	}
 }
 
@@ -133,6 +137,7 @@ func recordData(userAuth bool, articles chan<- ArticleData, users chan<- UserArt
 
 			users <- userData
 		}
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -147,34 +152,30 @@ type articleRequest struct {
 
 type UserArticleData struct {
 	gorm.Model
-	UserId uint
-	Url string
-	Title string
+	ID uint `gorm:"AUTO_INCREMENT"`
+	UserId uint `gorm:"primary_key"`
+	Url string `gorm:"primary_key"`
+	Title string `gorm:"primary_key"`
 	Lat float64
 	Lon float64
 	HoveredOver int
 	Generated int
 	Clicked int
 	Searched int
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
 	ArticleInteraction int `gorm:"-"`
 }
 
 type ArticleData struct {
 	gorm.Model
-	Url string
-	Title string
+	ID uint `gorm:"AUTO_INCREMENT"`
+	Url string `gorm:"primary_key"`
+	Title string `gorm:"primary_key"`
 	Lat float64
 	Lon float64
 	HoveredOver int
 	Generated int
 	Clicked int
 	Searched int
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	DeletedAt *time.Time
 	ArticleInteraction int `gorm:"-"`
 }
 

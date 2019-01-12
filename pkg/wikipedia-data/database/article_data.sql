@@ -1,4 +1,5 @@
-CREATE TABLE user_article_datas (
+CREATE TABLE user_article_data (
+  id SERIAL PRIMARY KEY,
   user_id int NOT NULL,
   url TEXT, 
   title TEXT, 
@@ -14,7 +15,8 @@ CREATE TABLE user_article_datas (
   deleted_at TIME
 );
 
-CREATE TABLE article_datas (
+CREATE TABLE article_data (
+  id SERIAL PRIMARY KEY,
   url TEXT,
   title TEXT,
   lat double precision,
