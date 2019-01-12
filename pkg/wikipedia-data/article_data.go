@@ -21,6 +21,7 @@ var (
 
 var dbParams = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host, port, user, password, dbname)
 
+
 func ArticleDataServer() {
 	db, err := gorm.Open("postgres", dbParams)
 	defer db.Close()
@@ -28,19 +29,24 @@ func ArticleDataServer() {
 		return
 	}
 
+
 	mux := http.NewServeMux()
-	articles := make(chan articleData, 5000)
-	users := make(chan userArticleData, 5000)
+	mux.HandleFunc("/wikidata", dataPipeline(db))
+	log.Fatal(http.ListenAndServe("localhost:8000", mux))
+}
+
+func dataPipeline (db *gorm.DB) http.HandlerFunc {
+	articles := make(chan ArticleData, 5000)
+	users := make(chan UserArticleData, 5000)
 
 	go processArticleData(db, articles)
 	go processUserData(db, users)
 
 	authChain := middleware.Auth(recordData(false, articles, nil))
-	mux.HandleFunc("/wikidata", authChain(recordData(true, articles, users)))
-	log.Fatal(http.ListenAndServe("localhost:8000", mux))
+	return authChain(recordData(true, articles, users))
 }
 
-func processArticleData (db *gorm.DB, in <-chan articleData) {
+func processArticleData (db *gorm.DB, in <-chan ArticleData) {
 	for data :=  range in  {
 		if db.NewRecord(data) {
 			data.CreatedAt = time.Now()
@@ -48,9 +54,10 @@ func processArticleData (db *gorm.DB, in <-chan articleData) {
 			data.Clicked = 0
 			data.Generated = 0
 			data.Searched = 0
-		} else {
-			db.First(&data)
+			db.Create(&data)
 		}
+
+		db.First(&data)
 
 		switch data.ArticleInteraction {
 		case GENERATED:
@@ -67,7 +74,7 @@ func processArticleData (db *gorm.DB, in <-chan articleData) {
 	}
 }
 
-func processUserData (db *gorm.DB, in <-chan userArticleData) {
+func processUserData (db *gorm.DB, in <-chan UserArticleData) {
 	for data := range in {
 		if db.NewRecord(data) {
 			data.CreatedAt = time.Now()
@@ -75,9 +82,10 @@ func processUserData (db *gorm.DB, in <-chan userArticleData) {
 			data.Clicked = 0
 			data.Generated = 0
 			data.Searched = 0
-		} else {
-			db.First(&data)
+			db.Create(&data)
 		}
+
+		db.First(&data)
 
 		switch data.ArticleInteraction {
 		case GENERATED:
@@ -94,7 +102,7 @@ func processUserData (db *gorm.DB, in <-chan userArticleData) {
 	}
 }
 
-func recordData(userAuth bool, articles chan<- articleData, users chan<- userArticleData) http.HandlerFunc {
+func recordData(userAuth bool, articles chan<- ArticleData, users chan<- UserArticleData) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		request := new(articleRequest)
 		err := json.NewDecoder(r.Body).Decode(request)
@@ -103,7 +111,7 @@ func recordData(userAuth bool, articles chan<- articleData, users chan<- userArt
 			return
 		}
 
-		data := articleData {
+		data := ArticleData {
 			Url: request.Url,
 			Title: request.Title,
 			Lat: request.Lat,
@@ -114,7 +122,7 @@ func recordData(userAuth bool, articles chan<- articleData, users chan<- userArt
 		articles <- data
 
 		if userAuth {
-			userData := userArticleData{
+			userData := UserArticleData{
 				UserId: request.UserId,
 				Url: request.Url,
 				Title: request.Title,
@@ -130,20 +138,20 @@ func recordData(userAuth bool, articles chan<- articleData, users chan<- userArt
 
 type articleRequest struct {
 	Url string `json: "url"`
-	Lat float32 `json: "lat"`
-	Lon float32 `json: "lon"`
+	Lat float64 `json: "lat"`
+	Lon float64 `json: "lon"`
 	Title string `json: "title"`
-	ArticleInteraction int `json: "interactionType"`
+	ArticleInteraction int `json: "articleInteraction"`
 	UserId uint `json:name`
 }
 
-type userArticleData struct {
+type UserArticleData struct {
 	gorm.Model
 	UserId uint
 	Url string
 	Title string
-	Lat float32
-	Lon float32
+	Lat float64
+	Lon float64
 	HoveredOver int
 	Generated int
 	Clicked int
@@ -154,12 +162,12 @@ type userArticleData struct {
 	ArticleInteraction int `gorm:"-"`
 }
 
-type articleData struct {
+type ArticleData struct {
 	gorm.Model
 	Url string
 	Title string
-	Lat float32
-	Lon float32
+	Lat float64
+	Lon float64
 	HoveredOver int
 	Generated int
 	Clicked int
