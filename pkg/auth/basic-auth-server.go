@@ -28,8 +28,8 @@ var dbParams = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host
 type UserAccount struct {
 	gorm.Model
 	Username string `gorm:"size:255"`
-	PasswordHash string `gorm:"type:text"`
-	PasswordSalt string `gorm:"type:text"`
+	PasswordHash []byte `gorm:"type:text"`
+	PasswordSalt []byte `gorm:"type:text"`
 	ID uint `gorm:"AUTO_INCREMENT"`
 	Email  string  `gorm:"size:255"`
 	Joined time.Time
@@ -92,8 +92,8 @@ func signup(db *gorm.DB) http.HandlerFunc {
 
 		user := UserAccount{
 			Username:     newUser.Username,
-			PasswordHash: string(passwordHash),
-			PasswordSalt: string(salt),
+			PasswordHash: passwordHash,
+			PasswordSalt: salt,
 			Email:        newUser.Email,
 			Joined:       time.Now(),
 		}
@@ -109,12 +109,6 @@ func signup(db *gorm.DB) http.HandlerFunc {
 	}
 }
 
-type userAuthInfo struct {
-	Username string `gorm:"size:255"`
-	PasswordHash string `gorm:"type:text"`
-	PasswordSalt string `gorm:"type:text"`
-	ID uint
-}
 
 type JwtToken struct {
 	Token string `json:"jwtToken"`
@@ -128,12 +122,12 @@ func login(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
-		userInfo := new(userAuthInfo)
+		userInfo := new(UserAccount)
 
 		db.Where("username = ?", loginReq.Username).First(&userInfo)
 		passwordHash, err := scrypt.Key([]byte(loginReq.Password), []byte(userInfo.PasswordSalt), tools.ScryptN, tools.ScryptR, tools.ScryptP, tools.ScryptKeyLen)
 
-		if loginReq.Password != string(passwordHash) {
+		if string(userInfo.PasswordHash) != string(passwordHash) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
