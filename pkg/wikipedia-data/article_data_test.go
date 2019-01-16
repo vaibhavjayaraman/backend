@@ -70,8 +70,11 @@ func TestBasicArticleDataAddNoUserNoConccurency(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	articles := make(chan ArticleData, 5000)
+	users := make(chan UserArticleData, 5000)
+
 	recorder := httptest.NewRecorder()
-	handler := http.HandlerFunc(dataPipeline(db))
+	handler := http.HandlerFunc(dataPipeline(articles, users))
 	handler.ServeHTTP(recorder, req)
 
 	if status := recorder.Code; status != http.StatusOK {
@@ -101,6 +104,10 @@ func TestBasicArticleDataAddNoUserNoConccurency(t *testing.T) {
 		t.Errorf("incorrect status code: recieved: %d, expected: %d",
 			status, http.StatusOK)
 	}
+
+	/* Running calls that would ordinarily be called as goroutines */
+	processArticleData(db, articles)
+	processUserData(db, users)
 
 	articleData := new(ArticleData)
 	db.Where("url = ?", url).First(&articleData)

@@ -6,14 +6,17 @@ import (
 	"net/http"
 )
 
+var auth_json = "Authorization"
 func Auth(unAuthchain http.HandlerFunc) Middleware {
 	return func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			if validate(w, r) {
-				h(w,r)
-			} else {
+			if r.Header.Get(auth_json) == ""  {
 				if unAuthchain != nil {
 					unAuthchain(w,r)
+				}
+			} else {
+				if validate(w, r) {
+					h(w, r)
 				}
 			}
 		}
@@ -21,7 +24,7 @@ func Auth(unAuthchain http.HandlerFunc) Middleware {
 }
 
 func validate(w http.ResponseWriter, r *http.Request) bool {
-	jwtString := r.Header.Get("Authorization")
+	jwtString := r.Header.Get(auth_json)
 	token, err := jwt.Parse(jwtString, func (token *jwt.Token) (interface{}, error){
 		return []byte(tools.JwtSecretKey), nil
 	})

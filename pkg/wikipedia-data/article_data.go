@@ -29,80 +29,76 @@ func ArticleDataServer() {
 		return
 	}
 
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/wikidata", dataPipeline(db))
-	log.Fatal(http.ListenAndServe("localhost:8000", mux))
-}
-
-func dataPipeline (db *gorm.DB) http.HandlerFunc {
 	articles := make(chan ArticleData, 5000)
 	users := make(chan UserArticleData, 5000)
 
 	go processArticleData(db, articles)
 	go processUserData(db, users)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/wikidata", dataPipeline(articles, users))
+	log.Fatal(http.ListenAndServe("localhost:8000", mux))
+}
+
+func dataPipeline (articles chan ArticleData, users chan UserArticleData) http.HandlerFunc {
 	authChain := middleware.Auth(recordData(false, articles, nil))
 	return authChain(recordData(true, articles, users))
 }
 
+
+var articleData = new(ArticleData)
+func articleDatabaseCall (db * gorm.DB, data ArticleData) {
+	notFound := db.Where("url = ? AND title = ?", data.Url, data.Title).First(&articleData)
+
+	switch data.ArticleInteraction {
+		case GENERATED:
+		data.Generated += 1
+		case HOVERED_OVER:
+		data.HoveredOver += 1
+		case CLICKED:
+		data.Clicked += 1
+		case SEARCHED:
+		data.Searched += 1
+	}
+	data.UpdatedAt = time.Now()
+	db.Save(&data)
+}
+
+func userDatabaseCall(db * gorm.DB, data UserArticleData) {
+	if db.NewRecord(data) {
+		data.CreatedAt = time.Now()
+		data.HoveredOver = 0
+		data.Clicked = 0
+		data.Generated = 0
+		data.Searched = 0
+		db.Create(&data)
+	}
+
+	db.First(&data)
+
+	switch data.ArticleInteraction {
+	case GENERATED:
+		data.Generated += 1
+	case HOVERED_OVER:
+		data.HoveredOver += 1
+	case CLICKED:
+		data.Clicked += 1
+	case SEARCHED:
+		data.Searched += 1
+	}
+	data.UpdatedAt = time.Now()
+	db.Save(data)
+}
+
 func processArticleData (db *gorm.DB, in <-chan ArticleData) {
 	for data :=  range in  {
-		if db.NewRecord(data) {
-			data.CreatedAt = time.Now()
-			data.HoveredOver = 0
-			data.Clicked = 0
-			data.Generated = 0
-			data.Searched = 0
-			db.Create(&data)
-		}
-
-		created := db.NewRecord(data)
-		if created {
-			return
-		}
-		db.First(&data)
-
-		switch data.ArticleInteraction {
-		case GENERATED:
-			data.Generated += 1
-		case HOVERED_OVER:
-			data.Generated += 1
-		case CLICKED:
-			data.Clicked += 1
-		case SEARCHED:
-			data.Searched += 1
-		}
-		data.UpdatedAt = time.Now()
-		db.Save(&data)
+		articleDatabaseCall(db, data)
 	}
 }
 
 func processUserData (db *gorm.DB, in <-chan UserArticleData) {
 	for data := range in {
-		if db.NewRecord(data) {
-			data.CreatedAt = time.Now()
-			data.HoveredOver = 0
-			data.Clicked = 0
-			data.Generated = 0
-			data.Searched = 0
-			db.Create(&data)
-		}
-
-		db.First(&data)
-
-		switch data.ArticleInteraction {
-		case GENERATED:
-			data.Generated += 1
-		case HOVERED_OVER:
-			data.Generated += 1
-		case CLICKED:
-			data.Clicked += 1
-		case SEARCHED:
-			data.Searched += 1
-		}
-		data.UpdatedAt = time.Now()
-		db.Save(data)
+		userDatabaseCall(db, data)
 	}
 }
 
@@ -152,7 +148,6 @@ type articleRequest struct {
 
 type UserArticleData struct {
 	gorm.Model
-	ID uint `gorm:"AUTO_INCREMENT"`
 	UserId uint `gorm:"primary_key"`
 	Url string `gorm:"primary_key"`
 	Title string `gorm:"primary_key"`
@@ -167,7 +162,6 @@ type UserArticleData struct {
 
 type ArticleData struct {
 	gorm.Model
-	ID uint `gorm:"AUTO_INCREMENT"`
 	Url string `gorm:"primary_key"`
 	Title string `gorm:"primary_key"`
 	Lat float64
