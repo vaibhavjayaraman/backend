@@ -23,7 +23,7 @@ var NOTILE string = "NT"
 func TileServer() {
 	c := cache.New(48*60*time.Minute, 60*time.Minute)
 	for _, region := range regions {
-		go createRegion(c, region)
+		createRegion(c, region)
 	}
 
 	mux := http.NewServeMux()
@@ -55,11 +55,11 @@ func createRegion(c *cache.Cache, region string) {
 
 func modifiedBinarySearch(years *[]int, year int, low int, high int) (int, int, error) {
 	/**get range between year that map to same tile**/
-	if year < (*years)[low] {
+	if year < (*years)[0] {
 		return 0, (*years)[low], errors.New(BELOWLOW)
 	}
 
-	if year > (*years)[high] {
+	if year > (*years)[len(*years)-1] {
 		return (*years)[high], 0, errors.New(ABOVEHIGH)
 	}
 
@@ -74,7 +74,7 @@ func modifiedBinarySearch(years *[]int, year int, low int, high int) (int, int, 
 	if (*years)[med] < year {
 		return modifiedBinarySearch(years, year, med, high)
 	} else {
-		return modifiedBinarySearch(years, year, low, med-1)
+		return modifiedBinarySearch(years, year, low, med)
 	}
 }
 
@@ -84,9 +84,9 @@ func findYear(years *[]int, year string) (string, string, error) {
 		return "", "", err
 	}
 
-	lyr, ryr, err := modifiedBinarySearch(years, yr, 0, len(*years))
+	lyr, ryr, err := modifiedBinarySearch(years, yr, 0, len(*years)-1)
 	if err != nil {
-		return "", "", err
+		return strconv.Itoa(lyr), strconv.Itoa(ryr), err
 	}
 	return strconv.Itoa(lyr), strconv.Itoa(ryr), nil
 }
@@ -100,23 +100,21 @@ func searchfs(c *cache.Cache, region string, year string) (string, string, error
 	lYear, rYear, err := findYear(&years, year)
 
 	if err != nil {
-		return "", "", err
+		return lYear, rYear, err
 	}
 
 	return lYear, rYear, nil
 }
 
-func updateCache(c *cache.Cache, region string, year string, w http.ResponseWriter) (string, error) {
+func updateCache(c *cache.Cache, region string, year string) (string, error) {
 	updatedYear := ""
 	yr, err := strconv.Atoi(year)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
 		return "", err
 	}
 
 	if yr > 2019 || yr < 0 {
 		/**So that nobody puts a small or large number and makes us a ton of unnecessary dates **/
-		w.WriteHeader(http.StatusOK)
 		return "", err
 	}
 
@@ -129,7 +127,6 @@ func updateCache(c *cache.Cache, region string, year string, w http.ResponseWrit
 			rYear = "2019"
 			updatedYear = "NA"
 		} else {
-			w.WriteHeader(http.StatusInternalServerError)
 			return "", err
 		}
 	} else {
@@ -154,20 +151,22 @@ func handle(c *cache.Cache) http.HandlerFunc {
 		var updatedYear string
 		var err error
 		path := strings.Split(r.URL.Path, "/")
-		region := path[0]
-		year := path[1]
+		region := path[1]
+		year := path[2]
 		val := region + year
 		resolvedYear, found := c.Get(val)
 		if !found {
-			updatedYear, err = updateCache(c, region, year, w)
+			updatedYear, err = updateCache(c, region, year)
 			if err != nil {
 				/**Insert Log **/
+				w.WriteHeader(http.StatusOK)
 				return
 			}
 		} else {
 			updatedYear = resolvedYear.(string)
 		}
 		if updatedYear != NOTILE {
+			/** enhancement - fix to not include double /. **/
 			url := TILEROOT + strings.Replace(r.URL.Path, year, updatedYear, 1)
 			http.ServeFile(w, r, url)
 		}
