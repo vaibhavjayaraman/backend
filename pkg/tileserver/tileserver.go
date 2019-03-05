@@ -1,8 +1,12 @@
 package tileserver
 
 import (
+	"errors"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -12,74 +16,162 @@ import (
 
 var TILEROOT string = "/tiles/"
 var regions []string = []string{"iberia", "mediaeval_middle_east", "northern_europe"}
+var BELOWLOW string = "BL"
+var ABOVEHIGH string = "UH"
+var NOTILE string = "NT"
 
 func TileServer() {
 	c := cache.New(48*60*time.Minute, 60*time.Minute)
-	for i, region := range regions {
+	for _, region := range regions {
 		go createRegion(c, region)
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", findTile(c))
+	mux.HandleFunc("/", handle(c))
 	log.Fatal(http.ListenAndServe(":8000", mux))
 }
 
 func createRegion(c *cache.Cache, region string) {
-	years , err := ioutil.ReadDir(TILEROOT + region)
+	dirs, err := ioutil.ReadDir(TILEROOT + region)
+	fmt.Printf("Loading: %s", region)
+	if err != nil {
+		return
+	}
 
-	for i, year := range years
+	var years []int
+
+	for _, year := range dirs {
+		yearNum, err := strconv.Atoi(year.Name())
+		if err == nil {
+			/**Avoid things that end in BC **/
+			years = append(years, yearNum)
+		}
+	}
+
+	sort.Ints(years)
+	c.Set(region, years, cache.NoExpiration)
+	return
 }
 
-func GetTiles(c, region, year string) string {
+func modifiedBinarySearch(years *[]int, year int, low int, high int) (int, int, error) {
+	/**get range between year that map to same tile**/
+	if year < (*years)[low] {
+		return 0, (*years)[low], errors.New(BELOWLOW)
+	}
 
+	if year > (*years)[high] {
+		return (*years)[high], 0, errors.New(ABOVEHIGH)
+	}
+
+	if low == high || high == low+1 {
+		return (*years)[low], (*years)[high], nil
+	}
+	med := (low + high) / 2
+	if (*years)[med] == year {
+		return (*years)[med], (*years)[med+1], nil
+	}
+
+	if (*years)[med] < year {
+		return modifiedBinarySearch(years, year, med, high)
+	} else {
+		return modifiedBinarySearch(years, year, low, med-1)
+	}
 }
 
-func findTile(c *cache.Cache) http.HandlerFunc {
+func findYear(years *[]int, year string) (string, string, error) {
+	yr, err := strconv.Atoi(year)
+	if err != nil {
+		return "", "", err
+	}
+
+	lyr, ryr, err := modifiedBinarySearch(years, yr, 0, len(*years))
+	if err != nil {
+		return "", "", err
+	}
+	return strconv.Itoa(lyr), strconv.Itoa(ryr), nil
+}
+
+func searchfs(c *cache.Cache, region string, year string) (string, string, error) {
+	lst, found := c.Get(region)
+	if !found {
+		return "", "", errors.New("region lst not found")
+	}
+	var years []int = lst.([]int)
+	lYear, rYear, err := findYear(&years, year)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	return lYear, rYear, nil
+}
+
+func updateCache(c *cache.Cache, region string, year string, w http.ResponseWriter) (string, error) {
+	updatedYear := ""
+	yr, err := strconv.Atoi(year)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return "", err
+	}
+
+	if yr > 2019 || yr < 0 {
+		/**So that nobody puts a small or large number and makes us a ton of unnecessary dates **/
+		w.WriteHeader(http.StatusOK)
+		return "", err
+	}
+
+	lYear, rYear, err := searchfs(c, region, year)
+	if err != nil {
+		if err.Error() == BELOWLOW {
+			lYear = "0"
+			updatedYear = "NA"
+		} else if err.Error() == ABOVEHIGH {
+			rYear = "2019"
+			updatedYear = "NA"
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			return "", err
+		}
+	} else {
+		updatedYear = lYear
+	}
+
+	start, err := strconv.Atoi(lYear)
+	if err != nil {
+		log.Fatal(err)
+	}
+	end, err := strconv.Atoi(rYear)
+	for i := start; i < end; i++ {
+		year := strconv.Itoa(i)
+		val := region + year
+		c.Set(val, updatedYear, cache.DefaultExpiration)
+	}
+	return updatedYear, nil
+}
+
+func handle(c *cache.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		var updatedYear string
+		var err error
 		path := strings.Split(r.URL.Path, "/")
 		region := path[0]
 		year := path[1]
 		val := region + year
 		resolvedYear, found := c.Get(val)
-		if found {
-			var rYear string = resolvedYear.(string)
-			if rYear != "NA" {
-				GetTiles(region, rYear)
+		if !found {
+			updatedYear, err = updateCache(c, region, year, w)
+			if err != nil {
+				/**Insert Log **/
+				return
 			}
-			w.WriteHeader(http.StatusOK)
-			return
 		} else {
-			yr, err := strconv.Atoi(year)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			if yr > 1992 || yr < 0 {
-				/**So that nobody puts a small or large number and makes us a ton of unnecessary dates **/
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			year = GetTiles(region, year)
-
-			/**NA means that the time is before any time before **/
-			if year == "NA" {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-
-			rYear, err := strconv.Atoi(year)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			for i := rYear; i <= yr; i++ {
-				ryr := strconv.Itoa(i)
-				val := region + ryr
-				c.Set(val, year, cache.DefaultExpiration)
-			}
-			w.WriteHeader(http.StatusOK)
-			return
+			updatedYear = resolvedYear.(string)
 		}
+		if updatedYear != NOTILE {
+			url := TILEROOT + strings.Replace(r.URL.Path, year, updatedYear, 1)
+			http.ServeFile(w, r, url)
+		}
+		w.WriteHeader(http.StatusOK)
+		return
 	}
 }
