@@ -21,12 +21,10 @@ CREATE TABLE article_data (
   title TEXT,
   lat double precision,
   lon double precision,
-  hovered_over int,
   generated int,
+  hovered_over int,
   clicked int,
   searched int,
-  article_interaction int,
   created_at TIME,
   updated_at TIME,
-  deleted_at TIME
 );

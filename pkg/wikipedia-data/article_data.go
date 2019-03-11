@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
 
-	_ "github.com/github.com/lib/pq"
-	"github.com/jinzhu/gorm"
+	_ "github.com/lib/pq"
 	"github.com/worldhistorymap/backend/pkg/middleware"
 	"github.com/worldhistorymap/backend/pkg/tools"
 )
@@ -31,89 +29,68 @@ func ArticleDataServer() {
 		return
 	}
 
-	articles := make(chan *request, 5000)
-	users := make(chan *request, 5000)
+	articles := make(chan *ArticleRequest, 5000)
 
 	go processArticleData(db, articles)
-	go processUserData(db, users)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", dataPipeline(articles, users))
+	mux.HandleFunc("/", dataPipeline(articles, nil))
 	log.Fatal(http.ListenAndServe("localhost:8000", mux))
 }
 
-func dataPipeline(articles chan ArticleData, users chan UserArticleData) http.HandlerFunc {
+func dataPipeline(articles chan *ArticleRequest, users chan *ArticleRequest) http.HandlerFunc {
 	authChain := middleware.Auth(recordData(false, articles, nil))
 	return authChain(recordData(true, articles, users))
 }
 
-var articleData = &new(ArticleData)
-var userData = &new(UserArticleData)
-
-func articleDatabaseCall(db *gorm.DB, request *ArticleRequest) {
-	notFound := db.Where("url = ? AND title = ?", request.Url, request.Title).First(articleData)
-
-	if notFound {
-		articleData.Url = request.Url
-		articleData.Title = request.Title
-		articleData.CreatedAt = time.Now()
-		articleData.Generated = 0
-		aricleData.HoveredOver = 0
-		articleData.Clicked = 0
-		articleData.Searched = 0
-	}
-
+func createArticleRecord(generated, hoveredOver, clicked, searched int, request *ArticleRequest, db *DB) {
+	db.Exec(
+		"INSERT INTO article_data (url, title, lat, lon, generated, hovered_over, clicked, searched) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		request.Url, request.Title, request.Lat, request.Lon, generated, hoveredOver,
+		clicked, searched)
+}
+func articleDatabaseCall(db *DB, request *ArticleRequest) {
 	switch request.ArticleInteraction {
 	case GENERATED:
-		articleData.Generated += 1
+		err := db.QueryRow(
+			"UPDATE article_data SET generated = generated + 1 WHERE url = $1 AND title = $2;", request.Url, request.Title)
+		if err != nil {
+			createArticleRecordRow(1, 0, 0, 0, db)
+		}
+		return
 	case HOVERED_OVER:
-		articleData.HoveredOver += 1
+		err := db.QueryRow(
+			"UPDATE article_data SET hovered_over = hovered_over + 1 WHERE url = $1 AND title = $2;", request.Url, request.Title)
+
+		if err == ni1 {
+			createArticleRecordRow(0, 1, 0, 0, db)
+		}
+		return
+
 	case CLICKED:
-		articleData.Clicked += 1
+		err = db.QueryRow(
+			"UPDATE article_data SET clicked = clicked + 1 WHERE url = $1 AND title = $2;", request.Url, request.Title)
+
+		if err == ni1 {
+			createArticleRecord(0, 0, 1, 0, db)
+		}
+
+		return
 	case SEARCHED:
-		articleData.Searched += 1
+		err = db.QueryRow(
+			"UPDATE article_data SET searched = searched + 1 WHERE url = $1 AND title = $2;", request.Url, request.Title)
+
+		if err == ni1 {
+			createArticleRecord(0, 0, 1, 0, db)
+		}
+		return
 	}
-	userData.UpdatedAt = time.Now()
-	db.Save(articleData)
+
 }
 
-func userDatabaseCall(db *gorm.DB, request *ArticleRequest) {
-	notFound := db.Where("url = ? AND title = ? AND user_id = ?", request.Url, request.Title, request.UserId).First(userData)
-
-	if notFound {
-		userData.Url = request.Url
-		userData.Title = request.Title
-		userData.UserId = request.UserId
-		userData.CreatedAt = time.Now()
-		userData.Generated = 0
-		userData.HoveredOver = 0
-		userData.Clicked = 0
-		userData.Searched = 0
-	}
-
-	switch request.ArticleInteraction {
-	case GENERATED:
-		userData.Generated += 1
-	case HOVERED_OVER:
-		userData.HoveredOver += 1
-	case CLICKED:
-		userData.Clicked += 1
-	case SEARCHED:
-		userData.Searched += 1
-	}
-	userData.UpdatedAt = time.Now()
-	db.Save(userData)
-}
-
-func processArticleData(db *gorm.DB, in <-chan *ArticleRequest) {
+func processArticleData(db *DB, in <-chan *ArticleRequest) {
 	for data := range in {
 		articleDatabaseCall(db, data)
-	}
-}
-
-func processUserData(db *gorm.DB, in <-chan *ArticleRequest) {
-	for data := range in {
-		userDatabaseCall(db, data)
 	}
 }
 
@@ -127,46 +104,15 @@ func recordData(userAuth bool, articles chan<- *ArticleRequest, users chan<- *Ar
 		}
 
 		articles <- &request
-
-		if userAuth {
-			users <- &request
-		}
 		w.WriteHeader(http.StatusOK)
 	}
 }
 
-type articleRequest struct {
+type ArticleRequest struct {
 	Url                string  `json: "url"`
 	Lat                float64 `json: "lat"`
 	Lon                float64 `json: "lon"`
 	Title              string  `json: "title"`
 	ArticleInteraction int     `json: "articleInteraction"`
 	UserId             uint    `json:  "uid"`
-}
-
-type UserArticleData struct {
-	gorm.Model
-	UserId             uint   `gorm:"primary_key"`
-	Url                string `gorm:"primary_key"`
-	Title              string `gorm:"primary_key"`
-	Lat                float64
-	Lon                float64
-	HoveredOver        int
-	Generated          int
-	Clicked            int
-	Searched           int
-	ArticleInteraction int `gorm:"-"`
-}
-
-type ArticleData struct {
-	gorm.Model
-	Url                string `gorm:"primary_key"`
-	Title              string `gorm:"primary_key"`
-	Lat                float64
-	Lon                float64
-	HoveredOver        int
-	Generated          int
-	Clicked            int
-	Searched           int
-	ArticleInteraction int `gorm:"-"`
 }
