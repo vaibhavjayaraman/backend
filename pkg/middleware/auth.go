@@ -1,18 +1,20 @@
 package middleware
 
 import (
-	"github.com/dgrijalva/jwt-go"
-	"historymap-microservices/pkg/tools"
 	"net/http"
+
+	"github.com/dgrijalva/jwt-go"
+	"github.com/worldhistorymap/backend/pkg/tools"
 )
 
 var auth_json = "Authorization"
+
 func Auth(unAuthchain http.HandlerFunc) Middleware {
 	return func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get(auth_json) == ""  {
+			if r.Header.Get(auth_json) == "" {
 				if unAuthchain != nil {
-					unAuthchain(w,r)
+					unAuthchain(w, r)
 				}
 			} else {
 				if validate(w, r) {
@@ -25,7 +27,7 @@ func Auth(unAuthchain http.HandlerFunc) Middleware {
 
 func validate(w http.ResponseWriter, r *http.Request) bool {
 	jwtString := r.Header.Get(auth_json)
-	token, err := jwt.Parse(jwtString, func (token *jwt.Token) (interface{}, error){
+	token, err := jwt.Parse(jwtString, func(token *jwt.Token) (interface{}, error) {
 		return []byte(tools.JwtSecretKey), nil
 	})
 
@@ -41,4 +43,3 @@ func validate(w http.ResponseWriter, r *http.Request) bool {
 
 	return true
 }
-
