@@ -49,6 +49,7 @@ func createArticleRecord(generated, hoveredOver, clicked, searched int, request 
 		request.Url, request.Title, request.Lat, request.Lon, generated, hoveredOver,
 		clicked, searched)
 }
+
 func articleDatabaseCall(db *DB, request *ArticleRequest) {
 	switch request.ArticleInteraction {
 	case GENERATED:
