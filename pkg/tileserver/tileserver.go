@@ -60,7 +60,7 @@ func modifiedBinarySearch(years *[]int, year int, low int, high int) (int, int, 
 	}
 
 	if year > (*years)[len(*years)-1] {
-		return (*years)[high], 0, errors.New(ABOVEHIGH)
+		return (*years)[high] + 1, 0, errors.New(ABOVEHIGH)
 	}
 
 	if low == high || high == low+1 {
