@@ -1,4 +1,19 @@
-package datalookup
+package articlelookup
+
+import (
+	"log"
+	"net/http"
+)
+
+func articleLookup() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handler)
+	log.Fatal(http.ListenAndServe(":8000", mux))
+}
+
+func handler(w http.ResponseWriter, r *http.Request) {
+
+}
 
 //create gRPC for lat/lon and have postgres instance for database be named something else
 //https://docs.microsoft.com/en-us/sql/relational-databases/spatial/query-spatial-data-for-nearest-neighbor?view=sql-server-2017
