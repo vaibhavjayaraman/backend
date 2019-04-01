@@ -12,7 +12,11 @@ func articleLookup() {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-
+	/**Look for lat/lon from protobuff **/
+	/** Do KNN search on underlying database.
+	If nothing is returned within a certain distance, return false but return closest found if within some other larger range,
+	and pass the lat/lon onto the articleservice api (as a go routine) so it can run the query to update the stores. If found, return true, and then
+	add to the protobuff values **/
 }
 
 //create gRPC for lat/lon and have postgres instance for database be named something else

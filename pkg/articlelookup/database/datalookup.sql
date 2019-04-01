@@ -4,8 +4,9 @@ CREATE EXTENSION postgis;
 CREATE TABLE markers_url (
     id BIGINT PRIMARY KEY, 
     url TEXT, 
-    title TEXT
+    title TEXT, 
     /*Include field to indicate which source store this information comes from.*/
+    source TEXT
 )
 
 SELECT AddGeometryColumn('markers', 'geom', 4326, 'POINT', 2)
