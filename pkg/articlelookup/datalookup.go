@@ -1,6 +1,7 @@
 package articlelookup
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"io/ioutil"
@@ -11,15 +12,30 @@ import (
 )
 
 type LatLonReq struct {
-	Lat float64 `json:"lat"`
-	Lon float64 `json:"lon"`
+	Lat  float64 `json:"lat"`
+	Lon  float64 `json:"lon"`
+	Year int     `json:"year"`
+}
+
+type Marker struct {
+	url    string
+	info   string
+	title  string
+	source string
+	lat    float64
+	lon    float64
 }
 
 func articleLookup() {
 	connStr := ""
 	db, err := sql.Open("postgres", connStr)
-	mux := http.NewServeMux(db)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	mux := http.NewServeMux()
 	mux.HandleFunc("/", handler(db))
+	mux.HandleFunc("/updatedb", store(db))
 	log.Fatal(http.ListenAndServe(":8000", mux))
 }
 
@@ -29,17 +45,55 @@ func handler(db *sql.DB) http.HandlerFunc {
 		body, err := ioutil.ReadAll(r.Body)
 		defer r.Body.Close()
 		if err != nil {
+			/*Add in log */
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		var llrq LatLonReq
 		err = json.Unmarshal(body, &llrq)
+		if err != nil {
+			/*Add in log*/
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		/**Optimize this query **/
+		/** KNN search on underlying database **/
+		queryStmt, err := db.Prepare("SELECT url, info, title, source, lat, lon FROM markers WHERE beg_year <= $1 AND end_year >= $1" +
+			"ORDER BY geom <-> ST_SetSRID(ST_MakePoint($2, $3), 4326) LIMIT 10;")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-		/**Look for lat/lon from protobuff **/
-		/** Do KNN search on underlying database.
-		If nothing is returned within a certain distance, return false but return closest found if within some other larger range,
-		and pass the lat/lon onto the articleservice api (as a go routine) so it can run the query to update the stores. If found, return true, and then
-		add to the protobuff values **/
+		var markers []Marker
+		rows, err := queryStmt.Query(llrq.Year, llrq.Lon, llrq.Lat)
+		defer rows.Close()
+
+		for rows.Next() {
+			var marker Marker
+			if err := rows.Scan(&marker); err != nil {
+				/*Add in log */
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			markers = append(markers, marker)
+		}
+		markerJson, err := json.Marshal(markers)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		go forwardCoords(body)
+		w.Write(markerJson)
+	}
+}
+
+func forwardCoords(msg []byte) {
+	/**switch to grpc**/
+	_, err := http.Post("http://articlestore/markers", "json", bytes.NewReader(msg))
+	if err != nil {
+		/**Add in Logging **/
+		return
 	}
 }
 
