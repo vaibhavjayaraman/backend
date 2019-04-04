@@ -6,7 +6,9 @@ CREATE TABLE markers_url (
     url TEXT, 
     title TEXT, 
     /*Include field to indicate which source store this information comes from.*/
-    source TEXT
+    source TEXT, 
+    beg_year int, 
+    end_year int, 
 )
 
 SELECT AddGeometryColumn('markers', 'geom', 4326, 'POINT', 2)
