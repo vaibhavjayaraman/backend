@@ -35,7 +35,7 @@ func articleLookup() {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handler(db))
-	mux.HandleFunc("/updatedb", store(db))
+	go store(db)
 	log.Fatal(http.ListenAndServe(":8000", mux))
 }
 
