@@ -85,6 +85,7 @@ func handler(db *sql.DB) http.HandlerFunc {
 		}
 		go forwardCoords(body)
 		w.Write(markerJson)
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
