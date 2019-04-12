@@ -82,15 +82,27 @@ func findWikipedia(llrq *latLonReq, db *sql.DB) {
 		"&format=json", llrq.Lat, llrq.Lon, wikiRange, fileReturnLimit)
 	resp, err := http.Get(url)
 	defer resp.Body.Close()
-	body := resp.Body
-	var data map[string]interface{}
+	body, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	var data = map[string]map[string]map[string]map[string]string {
+		"query": map[string]map[string]string {
+			"geosearch": map[string]string{}, 
+		}, 
+	}
+
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
 
-	var articles []map[string]map[string]interface{} = data["query"]["geosearch"]
+	[]articles = data["query"]["geosearch"]
+
 	if len(articles) >= 0 {
 		for article := range articles {
 			/**Enter into database **/
