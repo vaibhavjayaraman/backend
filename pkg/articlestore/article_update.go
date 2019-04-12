@@ -8,7 +8,10 @@ import (
 	"log"
 	"net/http"
 	"time"
+	"github.com/tidwall/gjson"
 )
+
+var WIKIPEDIA_PAGE_URL = "https://en.wikipedia.org/?curid="
 
 type latLonReq struct {
 	Lat float64 `json:"lat"`
@@ -89,32 +92,45 @@ func findWikipedia(llrq *latLonReq, db *sql.DB) {
 		return
 	}
 
-	var data = map[string]map[string]map[string]map[string]string {
-		"query": map[string]map[string]string {
-			"geosearch": map[string]string{}, 
-		}, 
-	}
-
-	err = json.Unmarshal(body, &data)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	[]articles = data["query"]["geosearch"]
+	
+	[]articles := gjson.Get(body, "query.geosearch")
 
 	if len(articles) >= 0 {
 		for article := range articles {
 			/**Enter into database **/
-			wikipediaUpdate()
+			wikipediaUpdate(article)
 		}
 	}
 }
 
-func wikipediaUpdate(db *sql.DB /**Mapping for article**/) {
-	var mkr Marker
+func wikipediaUpdate(db *sql.DB, article []byte) {
+	lat := gjson.Get(article, "lat");
+	lat := gjson.Get(article, "lon");
+	pgID := gjson.Get(article, "pageid");
+	title := gjson.Get(article, "title");
+	url := WIKIPEDIA_PAGE_URL + pgID
+	info := getWikipediaExtract(title)
+	mkr := marker {
+		lat: lat,
+		lon: lon, 
+		url: url, 
+		source: "wikipedia", 
+		info: info, 
+		title: title, 
+	}
 	updateDB(db, mkr)
 }
+
+func getWikipediaExtract(title string) {
+	url := fmt.Sprintf("https://en.wikipedia.org/api/rest_v1/page/summary/%s", title)
+	resp, err := http.Get(url);
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	return gjson.get(resp.Body, "extract")
+}
+
 func updateDB(db *sql.DB, mkr *marker) {
 
 }
