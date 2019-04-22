@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 	"github.com/tidwall/gjson"
+	"github.com/worldhistorymap/articlelookup"
 )
 
 var WIKIPEDIA_PAGE_URL = "https://en.wikipedia.org/?curid="
@@ -33,6 +34,7 @@ type marker struct {
 	searched     int64
 	created_at   time.Time
 	updated_at   time.Time
+	article_num 		 uint64
 }
 
 /**Checks to make sure that incoming protobuffer information from articlelookup which includes lat/lon information is updated. Has another
@@ -64,6 +66,7 @@ func articles(db *sql.DB) http.HandlerFunc {
 		err = json.Unmarshal(body, &llrq)
 		if err != nil {
 			/*Add to Log */
+			/*Check what happens if non float Lat/Lon are added */
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -98,6 +101,7 @@ func findWikipedia(llrq *latLonReq, db *sql.DB) {
 	if len(articles) >= 0 {
 		for article := range articles {
 			/**Enter into database **/
+			/**Should this be on its own thread **/
 			wikipediaUpdate(article)
 		}
 	}
@@ -118,7 +122,7 @@ func wikipediaUpdate(db *sql.DB, article []byte) {
 		info: info, 
 		title: title, 
 	}
-	updateDB(db, mkr)
+	updateDB(db, &mkr)
 }
 
 func getWikipediaExtract(title string) {
@@ -131,9 +135,64 @@ func getWikipediaExtract(title string) {
 	return gjson.get(resp.Body, "extract")
 }
 
-func updateDB(db *sql.DB, mkr *marker) {
-
+func dbqueue(mkrs chan<- * marker, mkr * marker) err {
+	/**Put in channel to avoid concurrency issue when updating article num */
+	mkrs <- mkr
 }
-func sendInfo() {
 
+func dbUpdate(mkrs <-chan * marker, db *sql.DB) {		
+	for x := range mkrs {
+		/**Call to DB and check if already in the DB**/
+	}
+}
+func sendInfoArticleLookup(mkr * Marker) {	
+	/**http.Post("nginx:6000/pub")**/
+}
+
+func sendInfoRecommendation(mkr *Marker) {
+	return 
+}
+
+type ArticleNum struct {
+	num uint64 	`json:"num"`
+}
+
+func getInfo(db *sql.DB) http.Handler {
+	/**Query DB **/	
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := ioutil.ReadAll(r.Body)
+		defer r.Body.close()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return 
+		}
+
+		var art ArticleNum
+		err := json.Unmarshal(body, &art)		
+		queryStmt, err := db.Prepare("SELECT url, info, title, source, lat, lon, num FROM markers WHERE num == ?;")
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return 
+		}
+		rows, err := queryStmt.Query(art.num)
+		/**Check if article does not exist with that num**/
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return 
+		}
+
+		if err := rows.Scan(&mkr) ; err != nil {
+			/*Add Log */
+			w.WriteHeader(http.StatusInternalServerError)
+			return 
+		}
+		
+		markerJson, err := json.Marshal(mkr)	
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return 
+		}
+		w.Write(markerJson)
+		w.WriteHeader(http.StatusOK)
+	}
 }

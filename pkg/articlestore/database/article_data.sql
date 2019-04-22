@@ -14,6 +14,7 @@ CREATE TABLE user_markers (
 
 CREATE TABLE markers (
   id SERIAL PRIMARY KEY,
+  num int NOT NULL,  
   url TEXT,
   info TEXT,
   title TEXT,

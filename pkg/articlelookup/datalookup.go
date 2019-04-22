@@ -24,6 +24,7 @@ type Marker struct {
 	source string
 	lat    float64
 	lon    float64
+	num    uint64
 }
 
 func articleLookup() {
@@ -53,9 +54,13 @@ func handler(db *sql.DB) http.HandlerFunc {
 		err = json.Unmarshal(body, &llrq)
 		if err != nil {
 			/*Add in log*/
+			/**Check what happens if non float values added in json**/
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+
+		llrq.Lat = fmt.Sprintf("%.6f", llrq.Lat)
+		llrq.Lon = fmt.Sprintf("%.6f", llrq.Lon)
 		/**Optimize this query **/
 		/** KNN search on underlying database **/
 		queryStmt, err := db.Prepare("SELECT url, info, title, source, lat, lon FROM markers WHERE beg_year <= $1 AND end_year >= $1" +
