@@ -1,0 +1,65 @@
+version: 2
+jobs:
+    docker:
+      - image: ubuntu-1604:201903-01 
+  steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run: echo "$DOCKER_PASS" | docker login --username $DOCKER_USER --password-stdin
+      - run: docker build -f $DOCKER_FILE -t worldhistorymap/$SERVICE_NAME:$TAG .
+      - run: docker push worldhistorymap/$SERVICE_NAME:$TAG
+workflows:
+  version: 2
+  tileserver:
+    jobs:
+      - upload:
+        filters:
+          tags:
+            only: /.*/
+          branches:
+            ignore: /.*/
+        environment:
+          DOCKER_FILE: Dockerfile.tileserver 
+          SERVICE_NAME: tileserver
+          TAG: $CIRCLE_TAG
+      - upload:
+        environment:
+           DOCKER_FILE: Dockerfile.tileserver
+           SERVICE_NAME: tileserver
+           TAG: $CIRCLE_SHA1 
+  scrapper:
+    jobs:
+      - upload:
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+           environment:
+             DOCKER_FILE: Dockerfile.scrapper
+             SERVICE_NAME: scrapper
+             TAG: $CIRCLE_TAG
+       - upload:
+           environment:
+             DOCKER_FILE: Dockerfile.scrapper
+             SERVICE_NAME: scrapper
+             TAG: $CIRCLE_SHA1
+  markerserver:
+       jobs:
+         - upload:
+             filters:
+               tags:
+                 only: /.*/
+               branches:
+                 ignore: /.*/
+             environment:
+               DOCKER_FILE: Dockerfile.markerserver
+               SERVICE_NAME: markerserver
+               TAG: $CIRCLE_TAG
+          - upload:
+              environment:
+                DOCKER_FILE: Dockerfile.markerserver
+                SERVICE_NAME: markerserver
+                TAG: $CIRCLE_SHA1
+              
